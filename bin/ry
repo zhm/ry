@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Library version
-VERSION="0.3.1"
+VERSION="0.3.2"
 
 [[ -z "$RY_PREFIX" ]] && RY_PREFIX="$HOME/.local"
 RY_LIB="${RY_PREFIX}/lib/ry"
@@ -119,14 +119,14 @@ ry::install() {
 
   # if you've got ruby-build, and you've named one of its recipes,
   # use that instead :)
+  [[ -z "$url" ]] && abort "no URL given.  usage: ry install <url> <name>"
+  [[ -z "$name" ]] && name="$url"
+  local dir="$RY_LIB/rubies/$name"
   if exists? ruby-build \
   && ruby-build --definitions | grep -qx "$url"; then
-    [[ -z "$name" ]] && name="$url"
-    ruby-build "$url" "$RY_LIB/rubies/$name"
+    ruby-build "$url" "$dir"
   else
-    [[ -z "$url" ]] && abort "no URL given.  usage: ry install <name> <url>"
 
-    local dir="$RY_LIB/rubies/$name"
     local logpath="/tmp/ry.log"
 
     # create build directory
@@ -156,10 +156,15 @@ ry::install() {
 }
 
 #
-# build and install the given ruby from source
+# ry build <name> <args...>
+# build and install the given ruby from source.
+# remaining arguments will be passed to ./configure,
+# if it's present.
 #
 ry::build() {
-  local name="$1"
+  local name="$1"; shift
+  local config_args="$@"
+
   assert_installed "$name"
 
   local install_prefix="$RY_LIB/rubies/$name"
@@ -173,8 +178,9 @@ ry::build() {
   fi
 
   if [[ -x "./configure" ]]; then
-    log "running ./configure --prefix=\"$install_prefix\"..."
-    ./configure --prefix="$install_prefix" "${@:2}"
+    log "running configure script."
+    "./configure --prefix=\"$install_prefix\" $config_args"
+    ./configure --prefix="$install_prefix" "$config_args"
   else
     log "no ./configure script found, skipping..."
   fi
@@ -184,8 +190,8 @@ ry::build() {
     exists? make || abort "make is required to build this ruby."
     PREFIX="$install_prefix" make && make install
   elif [[ -x ./installer ]]; then
-    log "./installer script found, running ./install --auto=\"$install_prefix\""
-    ./installer --auto="$install_prefix" "${@:2}"
+    log "./installer script found, running ./install --auto=\"$install_prefix\" \"$config_args\""
+    ./installer --auto="$install_prefix" "$config_args"
   elif [[ -f ./build.xml ]]; then
     log "build.xml found, building JRuby with ant"
     exists? ant || abort "ant is required to build this ruby."
